@@ -41,7 +41,7 @@ size_t random(size_t n) {
 }
 
 Particle create(size_t cols, size_t rows) {
-  auto const w = 4;
+  auto const w = 2;
   auto const h = 2;
   auto const dx = (random(2) ? w : -w) / 2;
   auto const dy = (random(2) ? h : -h) / 2;
@@ -50,7 +50,6 @@ Particle create(size_t cols, size_t rows) {
 }
 
 void update(size_t cols, size_t rows, Particle* particle) {
-  if (random(100)) return;
   update(cols - particle->w, &particle->x, &particle->dx);
   update(rows - particle->h, &particle->y, &particle->dy);
 }
@@ -64,7 +63,7 @@ void render(size_t cols, size_t rows, const std::vector<Particle>& particles) {
         assert(0 <= x && x < cols);
         assert(0 <= y && y < rows);
         attron(COLOR_PAIR(particle.color + 1));
-        mvaddch(y, x, '#');
+        mvaddstr(y, 2 * x, "＃");
         attroff(COLOR_PAIR(particle.color + 1));
       }
     }
@@ -73,7 +72,7 @@ void render(size_t cols, size_t rows, const std::vector<Particle>& particles) {
 
 struct State {
   State(size_t cols, size_t rows) : cols(cols), rows(rows) {
-    for (auto i = 0; i < 100; i++) particles.push_back(create(cols, rows));
+    for (auto i = 0; i < 16; i++) particles.push_back(create(cols, rows));
   }
 
   void render() const { ::render(cols, rows, particles); }
@@ -89,6 +88,7 @@ struct State {
 
 struct Terminal {
   Terminal() {
+    setlocale(LC_ALL, "");
     initscr();
     curs_set(0);
     use_default_colors();
@@ -100,7 +100,8 @@ struct Terminal {
     noecho();
     erase();
 
-    state = std::make_unique<State>(getCols() - 1, getRows() - 1);
+    auto constexpr size = 60;
+    state = std::make_unique<State>(size, size);
   }
 
   ~Terminal() { exit(); }
