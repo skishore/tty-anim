@@ -1,9 +1,63 @@
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <iomanip>
 #include <thread>
 #include <vector>
+
+//////////////////////////////////////////////////////////////////////////////
+
+struct Terminal {
+  Terminal() {
+    auto const error = []{
+      throw std::runtime_error("Terminal initialization failed!");
+    };
+
+    auto const fd = STDIN_FILENO;
+    if (!isatty(fd)) error();
+    if (tcgetattr(fd, &original) == -1) error();
+
+    auto raw = original;
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_oflag &= ~(OPOST);
+    raw.c_cflag |= (CS8);
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+
+    if (tcsetattr(fd, TCSAFLUSH, &raw) < 0) error();
+
+    onResize();
+  }
+
+  ~Terminal() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original);
+  }
+
+  size_t getCols() { return window.ws_col; }
+  size_t getRows() { return window.ws_row; }
+
+  void onResize() {
+    auto const code = ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
+    if (!code && getCols() && getRows()) return;
+    throw std::runtime_error("Failed to get window size!");
+  }
+
+  void exit() const {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original);
+  }
+
+ private:
+  termios original;
+  winsize window;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 
 auto constexpr kFPS = 60;
 auto constexpr kUsPerSecond = 1000000;
@@ -60,9 +114,21 @@ struct Timing {
   size_t index = 0;
 };
 
+//////////////////////////////////////////////////////////////////////////////
+
+static bool g_done = false;
+static std::function<void()> g_resize_handler = nullptr;
+void resizeHandler(int) { if (g_resize_handler) g_resize_handler(); }
+void sigintHandler(int) { g_done = true; }
+
 int main() {
+  signal(SIGINT, sigintHandler);
+  signal(SIGWINCH, resizeHandler);
+  auto terminal = Terminal();
+  g_resize_handler = [&]{ terminal.onResize(); };
+
   auto timing = Timing();
-  while (true) {
+  while (!g_done) {
     timing.block();
     timing.start();
     auto tmp = std::vector<size_t>();
