@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+#include <curses.h>
+
 //////////////////////////////////////////////////////////////////////////////
 
 struct Particle {
@@ -48,13 +50,12 @@ Particle create(size_t cols, size_t rows) {
 }
 
 void update(size_t cols, size_t rows, Particle* particle) {
+  if (random(100)) return;
   update(cols - particle->w, &particle->x, &particle->dx);
   update(rows - particle->h, &particle->y, &particle->dy);
 }
 
-std::string render(
-    size_t cols, size_t rows, const std::vector<Particle>& particles) {
-  auto pixels = std::vector<uint8_t>(cols * rows, 0);
+void render(size_t cols, size_t rows, const std::vector<Particle>& particles) {
   for (auto const& particle : particles) {
     for (size_t i = 0; i < particle.w; i++) {
       for (size_t j = 0; j < particle.h; j++) {
@@ -62,34 +63,20 @@ std::string render(
         auto const y = particle.y + j;
         assert(0 <= x && x < cols);
         assert(0 <= y && y < rows);
-        pixels[x + cols * y] = particle.color;
+        attron(COLOR_PAIR(particle.color + 1));
+        mvaddch(y, x, '#');
+        attroff(COLOR_PAIR(particle.color + 1));
       }
     }
   }
-
-  std::string result = "\x1b[2J\x1b[?25l\x1b[H";
-  for (size_t y = 0; y < rows; y++) {
-    size_t last = 0;
-    for (size_t x = 0; x < cols; x++) {
-      auto const color = pixels[x + cols * y];
-      if (!color) continue;
-      if (last < x) result.append(x - last, ' ');
-      result.append("\x1b[3");
-      result.push_back('0' + color);
-      result.append("m#\x1b[39m");
-      last = x + 1;
-    }
-    if (y < rows) result.append("\x1b[0K\r\n");
-  }
-  return result;
 }
 
 struct State {
   State(size_t cols, size_t rows) : cols(cols), rows(rows) {
-    for (auto i = 0; i < 10; i++) particles.push_back(create(cols, rows));
+    for (auto i = 0; i < 100; i++) particles.push_back(create(cols, rows));
   }
 
-  std::string render() const { return ::render(cols, rows, particles); }
+  void render() const { ::render(cols, rows, particles); }
   void update() { for (auto& x : particles) ::update(cols, rows, &x); }
 
  private:
@@ -102,56 +89,37 @@ struct State {
 
 struct Terminal {
   Terminal() {
-    auto const error = []{
-      throw std::runtime_error("Terminal initialization failed!");
-    };
+    initscr();
+    curs_set(0);
+    use_default_colors();
+    start_color();
+    for (auto i = 0; i < 8; i++) {
+      init_pair(i + 1, i, -1);
+    }
+    cbreak();
+    noecho();
+    erase();
 
-    auto const fd = STDIN_FILENO;
-    if (!isatty(fd)) error();
-    if (tcgetattr(fd, &original) == -1) error();
-
-    auto raw = original;
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~(OPOST);
-    raw.c_cflag |= (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 1;
-
-    if (tcsetattr(fd, TCSAFLUSH, &raw) < 0) error();
-
-    onResize();
+    state = std::make_unique<State>(getCols() - 1, getRows() - 1);
   }
 
   ~Terminal() { exit(); }
 
-  size_t getCols() const { return window.ws_col; }
-  size_t getRows() const { return window.ws_row; }
+  size_t getCols() const { return COLS; }
+  size_t getRows() const { return LINES; }
 
   void tick(const std::string& status) {
     if (!state) return;
     state->update();
-    auto render = state->render();
-    render.append(status);
-    write(STDOUT_FILENO, render.data(), render.size());
+    erase();
+    state->render();
+    mvaddstr(getRows() - 1, 0, status.data());
+    refresh();
   }
 
-  void onResize() {
-    auto const code = ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
-    auto const fail = code || !getCols() || !getRows();
-    if (fail) throw std::runtime_error("Failed to get window size!");
-    state = std::make_unique<State>(getCols(), getRows());
-  }
-
-  void exit() const {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original);
-    const std::string restore = "\x1b[?25h";
-    write(STDOUT_FILENO, restore.data(), restore.size());
-  }
+  void exit() const { endwin(); }
 
  private:
-  termios original;
-  winsize window;
   std::unique_ptr<State> state;
 };
 
@@ -215,8 +183,6 @@ struct Timing {
 //////////////////////////////////////////////////////////////////////////////
 
 static bool g_done = false;
-static std::function<void()> g_resize_handler = nullptr;
-void resizeHandler(int) { if (g_resize_handler) g_resize_handler(); }
 void sigintHandler(int) { g_done = true; }
 
 void segfaultHandler(int) {
@@ -231,9 +197,7 @@ int main() {
   srand(time(nullptr));
   signal(SIGINT, sigintHandler);
   signal(SIGSEGV, segfaultHandler);
-  signal(SIGWINCH, resizeHandler);
   Terminal terminal;
-  g_resize_handler = [&]{ terminal.onResize(); };
 
   auto timing = Timing();
   while (!g_done) {
