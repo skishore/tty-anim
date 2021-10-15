@@ -1,2 +1,2 @@
 #!/bin/bash
-clang++ -lncurses -std=c++14 -Wall -Werror main.cpp && ./a.out
+clang++ -lncurses -std=c++1z -Wall -Werror geo.cpp main.cpp && ./a.out
