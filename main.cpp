@@ -128,6 +128,8 @@ struct Terminal {
 
 auto constexpr kFPS = 60;
 auto constexpr kUsPerSecond = 1000000;
+auto constexpr kUsPerFrame = kUsPerSecond / kFPS;
+auto constexpr kUsMinDelay = int(0.9 * kUsPerFrame);
 
 struct Timing {
   using time_us_t = uint64_t;
@@ -140,10 +142,11 @@ struct Timing {
 
   void block() const {
     auto const& a = frames[index % kFPS];
-    auto const next = a.first + kUsPerSecond;
+    auto const& b = frames[(index + kFPS - 1) % kFPS];
+    auto const next = std::max(a.first + kUsPerSecond, b.first + kUsMinDelay);
     auto const prev = time();
     if (next <= prev) return;
-    auto const delay = std::min<time_us_t>(next - prev, kUsPerSecond / kFPS);
+    auto const delay = std::min<time_us_t>(next - prev, kUsPerFrame);
     std::this_thread::sleep_for(std::chrono::microseconds(delay));
   }
 
