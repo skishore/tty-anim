@@ -36,16 +36,9 @@ struct Point {
   int32_t y;
 };
 
-namespace std {
-template<> struct hash<Point> {
-  std::size_t operator()(const Point& p) const noexcept {
-    static_assert(sizeof(size_t) == 8);
-    auto const cast = [](int32_t x) {
-      return static_cast<uint64_t>(static_cast<uint32_t>(x));
-    };
-    return (cast(p.x) << 32) | cast(p.y);
-  }
-};
+template <typename H>
+H AbslHashValue(H h, const Point& p) {
+  return H::combine(std::move(h), p.x, p.y);
 }
 
 static_assert(std::is_pod<Point>::value);

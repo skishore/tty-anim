@@ -15,6 +15,8 @@
 
 #include <curses.h>
 
+#include "game.h"
+
 //////////////////////////////////////////////////////////////////////////////
 
 struct Particle {
@@ -174,7 +176,7 @@ struct Timing {
 
  private:
   time_us_t time() const {
-    auto const epoch = std::chrono::system_clock::now().time_since_epoch();
+    auto const epoch = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::microseconds>(epoch).count();
   }
 
