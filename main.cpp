@@ -13,8 +13,6 @@
 #include <thread>
 #include <vector>
 
-#include <curses.h>
-
 #include "game.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -25,45 +23,74 @@ short ColorIndex(uint8_t fg, uint8_t bg) {
 
 struct Terminal {
   Terminal() {
-    setlocale(LC_ALL, "");
-    initscr();
-    curs_set(0);
-    use_default_colors();
-    start_color();
-    for (auto i = 0; i < 256; i++) {
-      for (auto j = 0; j < 256; j++) {
-        auto const index = ColorIndex(i, j);
-        if (index < COLOR_PAIRS) init_pair(index, i - 1, j - 1);
-      }
-    }
-    init_pair(256, 1, -1);
-    cbreak();
-    noecho();
-    erase();
-
-    auto constexpr size = 60;
+    initTerminal(true);
+    terminalSize = getSize();
+    auto constexpr size = 30;
     state = std::make_unique<State>(Point{size, size});
   }
 
   ~Terminal() { exit(); }
 
-  size_t getCols() const { return COLS; }
-  size_t getRows() const { return LINES; }
-
   void tick(const std::string& status) {
-    if (!state) return;
+    auto const emitCharacter = [](uint16_t ch){
+      if (ch > 0xff00) {
+        const unsigned char ch0 = (ch & 0x3f) | 0x80;
+        const unsigned char ch1 = 0xbc;
+        const unsigned char ch2 = 0xef;
+        std::cout << ch2 << ch1 << ch0;
+      } else {
+        std::cout << static_cast<unsigned char>(ch);
+      }
+    };
+
+    auto size = state->board.size();
+    const Point offset{1 + (terminalSize.x - 2 * size.x) / 2,
+                       1 + (terminalSize.y - size.y) / 2};
+    for (auto row = 0; row < size.y; row++) {
+      moveCursor(offset + Point{0, row});
+      for (auto col = 0; col < size.x; col++) {
+        emitCharacter('.');
+      }
+    }
+
+    const auto col = terminalSize.x - static_cast<int>(status.size());
+    moveCursor({col, terminalSize.y});
+    std::cout << "\x1b[2K" << status << std::flush;
+
     //state->update();
-    erase();
+    //erase();
     //state->render();
     //auto const color = 1 + 16 + 1 * 0 + 6 * 2 + 36 * 4;
-    attr_set(0, 256, nullptr);
-    mvaddstr(getRows() - 1, 0, status.data());
-    refresh();
+    //attr_set(0, 256, nullptr);
+    //mvaddstr(getRows() - 1, 0, status.data());
+    //refresh();
   }
 
-  void exit() const { endwin(); }
+  void exit() { initTerminal(false); }
 
  private:
+  Point getSize() const {
+    struct winsize w;
+    ioctl(0, TIOCGWINSZ, &w);
+    return {w.ws_col, w.ws_row};
+  }
+
+  void initTerminal(bool enabled) {
+    const char* code = enabled ? "\x1b[?1049h\x1b[?25l"
+                               : "\x1b[?1049l\x1b[?25h";
+    std::cout << code << std::flush;
+
+    struct termios t;
+    tcgetattr(0, &t);
+    enabled ? (t.c_lflag &= ~ECHO) : (t.c_lflag |= ECHO);
+    tcsetattr(0, TCSANOW, &t);
+  }
+
+  void moveCursor(Point point) {
+    std::cout << "\x1b[" << point.y << ";" << point.x << "H";
+  }
+
+  Point terminalSize;
   std::unique_ptr<State> state;
 };
 

@@ -15,16 +15,16 @@ constexpr static TileFlags FlagBlocked = 0x1;
 constexpr static TileFlags FlagObscure = 0x2;
 
 struct Tile {
-  char glyph;
+  Glyph glyph;
   TileFlags flags;
   std::string description;
 };
 
 static const Tile* getTile(char ch) {
   static const absl::flat_hash_map<char, Tile> result{
-    {'.', {'.', FlagNone,    "grass"}},
-    {'"', {'.', FlagObscure, "tall grass"}},
-    {'#', {'.', FlagBlocked, "a tree"}},
+    {'.', {Wide('.'),        FlagNone,    "grass"}},
+    {'"', {Wide('"', 0x231), FlagObscure, "tall grass"}},
+    {'#', {Wide('#', 0x010), FlagBlocked, "a tree"}},
   };
   return &result.at(ch);
 }

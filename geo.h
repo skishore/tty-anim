@@ -9,6 +9,8 @@
 // Point and Matrix classes, in the header to allow inlining.
 
 struct Point {
+  constexpr static Point origin() { return {0, 0}; }
+
   Point& operator+=(const Point& o) { *this = *this + o; return *this; }
   Point& operator-=(const Point& o) { *this = *this - o; return *this; }
 
