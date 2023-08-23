@@ -1,2 +1,2 @@
 #!/bin/bash
-clang++ -O2 -lncurses -Iabseil-cpp -std=c++1z -Wall -Werror geo.cpp main.cpp
+clang++ -O2 -lncurses -Iabseil-cpp -std=c++1z -Wall -Werror geo.cpp main.cpp abseil-cpp/absl/hash/internal/city.cc abseil-cpp/absl/hash/internal/hash.cc abseil-cpp/absl/hash/internal/low_level_hash.cc abseil-cpp/absl/base/internal/raw_logging.cc abseil-cpp/absl/base/internal/throw_delegate.cc abseil-cpp/absl/container/internal/raw_hash_set.cc

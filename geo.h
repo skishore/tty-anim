@@ -1,11 +1,9 @@
 #pragma once
 
-#include <algorithm>
-#include <cassert>
-#include <cmath>
 #include <cstdint>
-#include <functional>
 #include <vector>
+
+#include "base.h"
 
 //////////////////////////////////////////////////////////////////////////////
 // Point and Matrix classes, in the header to allow inlining.
@@ -43,28 +41,35 @@ H AbslHashValue(H h, const Point& p) {
 
 static_assert(std::is_pod<Point>::value);
 
-template<typename T>
+template<typename Value>
 struct Matrix {
-  Matrix(const Point& size, const T& init)
-    : m_size(size), m_data(size.x * size.y, init) {}
+  explicit Matrix(Point size, const Value& init)
+    : m_size(size), m_init(init), m_data(size.x * size.y, init) {}
 
-  const T& get(const Point& p) const {
-    assert(contains(p));
-    return m_data[p.x + m_size.x * p.y];
+  Point size() const { return m_size; }
+
+  const Value& get(Point p) const {
+    return contains(p) ? m_data[p.x + m_size.x * p.y] : m_init;
   }
 
-  void set(const Point& p, const T& t) {
-    assert(contains(p));
-    m_data[p.x + m_size.x * p.y] = t;
+  void set(Point p, const Value& v) {
+    if (contains(p)) m_data[p.x + m_size.x * p.y] = v;
   }
 
-  bool contains(const Point& p) const {
+  bool contains(Point p) const {
     return 0 <= p.x && p.x < m_size.x && 0 <= p.y && p.y < m_size.y;
   }
 
+  void fill(const Value& v) {
+    std::fill(m_data.begin(), m_data.end(), v);
+  }
+
 private:
-  Point m_size;
-  std::vector<T> m_data;
+  const Point m_size;
+  const Value m_init;
+  std::vector<Value> m_data;
+
+  DISALLOW_COPY_AND_ASSIGN(Matrix);
 };
 
 //////////////////////////////////////////////////////////////////////////////

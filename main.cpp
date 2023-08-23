@@ -19,74 +19,9 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct Particle {
-  size_t x;
-  size_t y;
-  size_t w;
-  size_t h;
-  ssize_t dx;
-  ssize_t dy;
-  uint8_t color;
-};
-
-void update(size_t max, size_t* x, ssize_t* v) {
-  auto nx = static_cast<ssize_t>(*x + *v);
-  while (!(0 <= nx && nx <= static_cast<ssize_t>(max))) {
-    nx = nx < 0 ? -nx : 2 * max - nx;
-    *v = -*v;
-  }
-  *x = nx;
+short ColorIndex(uint8_t fg, uint8_t bg) {
+  return ((static_cast<short>(fg) << 8) | static_cast<short>(bg)) + 1;
 }
-
-size_t random(size_t n) {
-  return rand() % n;
-}
-
-Particle create(size_t cols, size_t rows) {
-  auto const w = 2;
-  auto const h = 2;
-  auto const dx = (random(2) ? w : -w) / 2;
-  auto const dy = (random(2) ? h : -h) / 2;
-  auto const color = static_cast<uint8_t>(random(7) + 1);
-  return {random(cols - w), random(rows - h), w, h, dx, dy, color};
-}
-
-void update(size_t cols, size_t rows, Particle* particle) {
-  update(cols - particle->w, &particle->x, &particle->dx);
-  update(rows - particle->h, &particle->y, &particle->dy);
-}
-
-void render(size_t cols, size_t rows, const std::vector<Particle>& particles) {
-  for (auto const& particle : particles) {
-    for (size_t i = 0; i < particle.w; i++) {
-      for (size_t j = 0; j < particle.h; j++) {
-        auto const x = particle.x + i;
-        auto const y = particle.y + j;
-        assert(0 <= x && x < cols);
-        assert(0 <= y && y < rows);
-        attron(COLOR_PAIR(particle.color + 1));
-        mvaddstr(y, 2 * x, "＃");
-        attroff(COLOR_PAIR(particle.color + 1));
-      }
-    }
-  }
-}
-
-struct State {
-  State(size_t cols, size_t rows) : cols(cols), rows(rows) {
-    for (auto i = 0; i < 16; i++) particles.push_back(create(cols, rows));
-  }
-
-  void render() const { ::render(cols, rows, particles); }
-  void update() { for (auto& x : particles) ::update(cols, rows, &x); }
-
- private:
-  size_t cols;
-  size_t rows;
-  std::vector<Particle> particles;
-};
-
-//////////////////////////////////////////////////////////////////////////////
 
 struct Terminal {
   Terminal() {
@@ -95,15 +30,19 @@ struct Terminal {
     curs_set(0);
     use_default_colors();
     start_color();
-    for (auto i = 0; i < 8; i++) {
-      init_pair(i + 1, i, -1);
+    for (auto i = 0; i < 256; i++) {
+      for (auto j = 0; j < 256; j++) {
+        auto const index = ColorIndex(i, j);
+        if (index < COLOR_PAIRS) init_pair(index, i - 1, j - 1);
+      }
     }
+    init_pair(256, 1, -1);
     cbreak();
     noecho();
     erase();
 
     auto constexpr size = 60;
-    state = std::make_unique<State>(size, size);
+    state = std::make_unique<State>(Point{size, size});
   }
 
   ~Terminal() { exit(); }
@@ -113,9 +52,11 @@ struct Terminal {
 
   void tick(const std::string& status) {
     if (!state) return;
-    state->update();
+    //state->update();
     erase();
-    state->render();
+    //state->render();
+    //auto const color = 1 + 16 + 1 * 0 + 6 * 2 + 36 * 4;
+    attr_set(0, 256, nullptr);
     mvaddstr(getRows() - 1, 0, status.data());
     refresh();
   }
