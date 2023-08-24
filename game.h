@@ -1,6 +1,8 @@
 #pragma once
 
+#include <deque>
 #include <string>
+#include <vector>
 
 #include <absl/container/flat_hash_map.h>
 
@@ -49,7 +51,7 @@ struct Board {
   Point getSize() const;
 
   Status getStatus(Point p) const;
-  const Tile* getTile(Point p) const;
+  const Tile& getTile(Point p) const;
   const Entity* getEntity(Point p) const;
 
   const std::vector<Entity*>& getEntities() const;
@@ -58,6 +60,7 @@ struct Board {
 
   void setTile(Point p, const Tile* tile);
   void addEntity(OwnedEntity entity);
+  void moveEntity(Entity& entity, Point to);
 
 private:
   Matrix<const Tile*> m_map;
@@ -80,13 +83,15 @@ struct State {
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct UI {
-  UI();
+struct IO {
+  IO();
+  void tick();
 
   State state;
   Matrix<Glyph> frame;
+  std::deque<Input> inputs;
 
-  DISALLOW_COPY_AND_ASSIGN(UI);
+  DISALLOW_COPY_AND_ASSIGN(IO);
 };
 
 //////////////////////////////////////////////////////////////////////////////

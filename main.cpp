@@ -11,7 +11,6 @@
 #include <iomanip>
 #include <sstream>
 #include <thread>
-#include <vector>
 
 #include "game.h"
 
@@ -25,34 +24,38 @@ struct Terminal {
   Terminal() {
     initTerminal(true);
     terminalSize = getSize();
-    lastFrame = ui.frame;
+    lastFrame = io.frame;
   }
 
   ~Terminal() { exit(); }
 
   void tick(const std::string& status) {
+    getKeyInputs(io.inputs);
+    io.tick();
+
+    lastFrame = io.frame;
     auto const size = lastFrame.size();
-    const Point offset{1 + (terminalSize.x - size.x) / 2,
-                       1 + (terminalSize.y - size.y) / 2};
+    const Point offset{(terminalSize.x - size.x) / 2,
+                       (terminalSize.y - size.y) / 2};
     for (auto row = 0; row < size.y; row++) {
       moveCursor(offset + Point{0, row});
       for (auto col = 0; col < size.x;) {
         auto const glyph = lastFrame.get({col, row});
         if (glyph.ch > 0xff00) {
-          const unsigned char ch0 = (glyph.ch & 0x3f) | 0x80;
-          const unsigned char ch1 = 0xbc;
-          const unsigned char ch2 = 0xef;
+          const char ch0 = (glyph.ch & 0x3f) | 0x80;
+          const char ch1 = 0xbc;
+          const char ch2 = 0xef;
           std::cout << ch2 << ch1 << ch0;
           col += 2;
         } else {
-          std::cout << static_cast<unsigned char>(glyph.ch);
+          std::cout << static_cast<char>(glyph.ch);
           col += 1;
         }
       }
     }
 
     const auto col = terminalSize.x - static_cast<int>(status.size());
-    moveCursor({col, terminalSize.y});
+    moveCursor({col - 1, terminalSize.y - 1});
     std::cout << "\x1b[2K" << status << std::flush;
 
     //state->update();
@@ -80,15 +83,62 @@ struct Terminal {
 
     struct termios t;
     tcgetattr(0, &t);
-    enabled ? (t.c_lflag &= ~ECHO) : (t.c_lflag |= ECHO);
+    auto const flags = ICANON | ECHO;
+    enabled ? (t.c_lflag &= ~flags) : (t.c_lflag |= flags);
     tcsetattr(0, TCSANOW, &t);
   }
 
   void moveCursor(Point point) {
-    std::cout << "\x1b[" << point.y << ";" << point.x << "H";
+    std::cout << "\x1b[" << point.y + 1 << ";" << point.x + 1 << "H";
   }
 
-  UI ui;
+  void getKeyInputs(std::deque<Input>& inputs) {
+    int count = 0;
+    ioctl(STDIN_FILENO, FIONREAD, &count);
+    for (auto i = 0; i < count;) {
+      auto const getch = [&]{ i++; return getchar(); };
+      auto const ch = getch();
+      if (ch != 27 || i >= count) {
+        if (0x20 <= ch && ch < 0x7f) {
+          inputs.push_back(Input(ch));
+        } else if (ch == 9) {
+          inputs.push_back(Input::Tab);
+        } else if (ch == 10) {
+          inputs.push_back(Input::Enter);
+        } else if (i >= count) {
+          inputs.push_back(Input::Esc);
+        }
+        continue;
+      }
+      auto const next = getch();
+      if (next == 27) {
+        inputs.push_back(Input(ch));
+        continue;
+      } else if (next != '[' || i >= count) {
+        i = count;
+        continue;
+      }
+      auto const code = getch();
+      if ('A' <= code && code <= 'D') {
+        auto const base = static_cast<int>(Input::Up);
+        inputs.push_back(Input(base + (code - 'A')));
+        continue;
+      } else if (code == 'Z') {
+        inputs.push_back(Input::ShiftTab);
+        continue;
+      }
+      auto semi = code;
+      while (semi != ';' && i < count) semi = getch();
+      auto const modifier = i < count ? getch() : '\0';
+      auto const last = i < count ? getch() : '\0';
+      if (modifier == '2' && 'A' <= last && last <= 'D') {
+        auto const base = static_cast<int>(Input::ShiftUp);
+        inputs.push_back(Input(base + (last - 'A')));
+      }
+    }
+  }
+
+  IO io;
   Point terminalSize;
   Matrix<Glyph> lastFrame;
 };
