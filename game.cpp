@@ -6,7 +6,7 @@ namespace {
 
 //////////////////////////////////////////////////////////////////////////////
 
-constexpr size_t kMapSize = 32;
+constexpr size_t kMapSize = 31;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -100,16 +100,20 @@ const Tile* Board::getTile(Point p) const { return m_map.get(p); }
 
 const Entity* Board::getEntity(Point p) const {
   auto const it = m_entityAtPos.find(p);
-  return it != m_entityAtPos.end() ? it->second : nullptr;
+  return it != m_entityAtPos.end() ? it->second.get() : nullptr;
+}
+
+const std::vector<Entity*>& Board::getEntities() const {
+  return m_entities;
 }
 
 void Board::setTile(Point p, const Tile* tile) { m_map.set(p, tile); }
 
-void Board::addEntity(std::unique_ptr<Entity> entity) {
+void Board::addEntity(OwnedEntity entity) {
+  m_entities.emplace_back(entity.get());
   auto& entry = m_entityAtPos[entity->pos];
   assert(entry == nullptr);
-  entry = entity.get();
-  m_entities.emplace_back(entity);
+  entry = std::move(entity);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -121,19 +125,25 @@ State::State() : board({kMapSize, kMapSize}) {
     initBoard(board);
     if (board.getStatus(start) == Status::Free) break;
   }
-  auto player = makeTrainer(start);
-  this->player = player.get();
-  board.addEntity(std::move(player));
+  auto trainer = makeTrainer(start);
+  player = trainer.get();
+  board.addEntity(std::move(trainer));
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 UI::UI() : frame({2 * kMapSize, kMapSize}, {}) {
+  auto const offset = Point::origin();
   auto const size = state.board.getSize();
+  auto const map = [&](Point p) { return offset + Point{2 * p.x, p.y}; };
   for (auto y = 0; y < size.y; y++) {
     for (auto x = 0; x < size.x; x++) {
-      frame.set({2 * x, y}, state.board.getTile({x, y})->glyph);
+      auto const p = Point{x, y};
+      frame.set(map(p), state.board.getTile(p)->glyph);
     }
+  }
+  for (const auto& entity : state.board.getEntities()) {
+    frame.set(map(entity->pos), entity->glyph);
   }
 }
 

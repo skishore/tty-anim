@@ -22,7 +22,7 @@ struct Tile {
   std::string description;
 };
 
-static const Tile* tileType(char ch) {
+inline const Tile* tileType(char ch) {
   static const absl::flat_hash_map<char, Tile> result{
     {'.', {Wide('.'),        FlagNone,    "grass"}},
     {'"', {Wide('"', 0x231), FlagObscure, "tall grass"}},
@@ -37,6 +37,7 @@ struct Entity {
   Glyph glyph;
   Point pos;
 };
+using OwnedEntity = std::unique_ptr<Entity>;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -46,19 +47,22 @@ struct Board {
   // Reads
 
   Point getSize() const;
+
   Status getStatus(Point p) const;
   const Tile* getTile(Point p) const;
   const Entity* getEntity(Point p) const;
 
+  const std::vector<Entity*>& getEntities() const;
+
   // Writes
 
   void setTile(Point p, const Tile* tile);
-  void addEntity(std::unique_ptr<Entity> entity);
+  void addEntity(OwnedEntity entity);
 
 private:
   Matrix<const Tile*> m_map;
-  std::vector<std::unique_ptr<Entity>> m_entities;
-  absl::flat_hash_map<Point, Entity*> m_entityAtPos;
+  std::vector<Entity*> m_entities;
+  absl::flat_hash_map<Point, OwnedEntity> m_entityAtPos;
 
   DISALLOW_COPY_AND_ASSIGN(Board);
 };
