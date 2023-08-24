@@ -9,6 +9,8 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
+enum class Status { Free, Blocked, Occupied };
+
 using TileFlags = uint8_t;
 constexpr static TileFlags FlagNone    = 0x0;
 constexpr static TileFlags FlagBlocked = 0x1;
@@ -20,7 +22,7 @@ struct Tile {
   std::string description;
 };
 
-static const Tile* getTile(char ch) {
+static const Tile* tileType(char ch) {
   static const absl::flat_hash_map<char, Tile> result{
     {'.', {Wide('.'),        FlagNone,    "grass"}},
     {'"', {Wide('"', 0x231), FlagObscure, "tall grass"}},
@@ -31,20 +33,32 @@ static const Tile* getTile(char ch) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-using Entity = char;
+struct Entity {
+  Glyph glyph;
+  Point pos;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 
 struct Board {
-  explicit Board(Point size) : m_map(size, getTile('#')) {
-    m_map.fill(getTile('.'));
-  }
+  explicit Board(Point size);
 
   // Reads
 
-  Point size() const { return m_map.size(); }
+  Point getSize() const;
+  Status getStatus(Point p) const;
+  const Tile* getTile(Point p) const;
+  const Entity* getEntity(Point p) const;
+
+  // Writes
+
+  void setTile(Point p, const Tile* tile);
+  void addEntity(std::unique_ptr<Entity> entity);
 
 private:
   Matrix<const Tile*> m_map;
-  absl::flat_hash_map<Point, Entity> m_entities;
+  std::vector<std::unique_ptr<Entity>> m_entities;
+  absl::flat_hash_map<Point, Entity*> m_entityAtPos;
 
   DISALLOW_COPY_AND_ASSIGN(Board);
 };
@@ -52,11 +66,23 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 struct State {
-  explicit State(Point size) : board(size) {}
+  State();
 
   Board board;
+  Entity* player;
 
   DISALLOW_COPY_AND_ASSIGN(State);
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+struct UI {
+  UI();
+
+  State state;
+  Matrix<Glyph> frame;
+
+  DISALLOW_COPY_AND_ASSIGN(UI);
 };
 
 //////////////////////////////////////////////////////////////////////////////

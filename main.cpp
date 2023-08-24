@@ -25,31 +25,29 @@ struct Terminal {
   Terminal() {
     initTerminal(true);
     terminalSize = getSize();
-    auto constexpr size = 30;
-    state = std::make_unique<State>(Point{size, size});
+    lastFrame = ui.frame;
   }
 
   ~Terminal() { exit(); }
 
   void tick(const std::string& status) {
-    auto const emitCharacter = [](uint16_t ch){
-      if (ch > 0xff00) {
-        const unsigned char ch0 = (ch & 0x3f) | 0x80;
-        const unsigned char ch1 = 0xbc;
-        const unsigned char ch2 = 0xef;
-        std::cout << ch2 << ch1 << ch0;
-      } else {
-        std::cout << static_cast<unsigned char>(ch);
-      }
-    };
-
-    auto size = state->board.size();
-    const Point offset{1 + (terminalSize.x - 2 * size.x) / 2,
+    auto const size = lastFrame.size();
+    const Point offset{1 + (terminalSize.x - size.x) / 2,
                        1 + (terminalSize.y - size.y) / 2};
     for (auto row = 0; row < size.y; row++) {
       moveCursor(offset + Point{0, row});
-      for (auto col = 0; col < size.x; col++) {
-        emitCharacter('.');
+      for (auto col = 0; col < size.x;) {
+        auto const glyph = lastFrame.get({col, row});
+        if (glyph.ch > 0xff00) {
+          const unsigned char ch0 = (glyph.ch & 0x3f) | 0x80;
+          const unsigned char ch1 = 0xbc;
+          const unsigned char ch2 = 0xef;
+          std::cout << ch2 << ch1 << ch0;
+          col += 2;
+        } else {
+          std::cout << static_cast<unsigned char>(glyph.ch);
+          col += 1;
+        }
       }
     }
 
@@ -90,8 +88,9 @@ struct Terminal {
     std::cout << "\x1b[" << point.y << ";" << point.x << "H";
   }
 
+  UI ui;
   Point terminalSize;
-  std::unique_ptr<State> state;
+  Matrix<Glyph> lastFrame;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -45,12 +45,14 @@ static_assert(std::is_pod<Point>::value);
 
 template<typename Value>
 struct Matrix {
-  explicit Matrix(Point size, const Value& init)
+  Matrix() {}
+
+  Matrix(Point size, const Value& init)
     : m_size(size), m_init(init), m_data(size.x * size.y, init) {}
 
   Point size() const { return m_size; }
 
-  const Value& get(Point p) const {
+  Value get(Point p) const {
     return contains(p) ? m_data[p.x + m_size.x * p.y] : m_init;
   }
 
@@ -67,11 +69,9 @@ struct Matrix {
   }
 
 private:
-  const Point m_size;
-  const Value m_init;
+  Point m_size = {};
+  Value m_init = {};
   std::vector<Value> m_data;
-
-  DISALLOW_COPY_AND_ASSIGN(Matrix);
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -11,9 +11,9 @@
 struct Color { uint8_t value; };
 struct Glyph { uint16_t ch; Color fg; Color bg; };
 
-constexpr static Color BLACK = {0};
-constexpr static Color NONE  = {255};
-constexpr static Color GRAY  = {16 + 216 + 5};
+constexpr static Color kBlack = {0};
+constexpr static Color kNone  = {255};
+constexpr static Color kGray  = {16 + 216 + 5};
 
 constexpr static Color RGB(int code) {
   auto const r = (code >> 8) & 0xf;
@@ -25,5 +25,5 @@ constexpr static Color RGB(int code) {
 constexpr static Glyph Wide(char ch, int code = 255) {
   auto const offset = 0xff00 - 0x20;
   auto const wide = static_cast<char16_t>(static_cast<uint32_t>(ch) + offset);
-  return {wide, code == 255 ? NONE : RGB(code), NONE};
+  return {wide, code == 255 ? kNone : RGB(code), kNone};
 }
