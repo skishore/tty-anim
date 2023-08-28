@@ -16,6 +16,16 @@
 struct Color { uint8_t value; };
 struct Glyph { uint16_t ch; Color fg; Color bg; };
 
+inline bool operator==(const Color& a, const Color& b) {
+  return a.value == b.value;
+}
+inline bool operator!=(const Color& a, const Color& b) { return !(a == b); }
+
+inline bool operator==(const Glyph& a, const Glyph& b) {
+  return a.ch == b.ch && a.fg == b.fg && a.bg == b.bg;
+}
+inline bool operator!=(const Glyph& a, const Glyph& b) { return !(a == b); }
+
 constexpr static Color kBlack = {0};
 constexpr static Color kNone  = {255};
 constexpr static Color kGray  = {16 + 216 + 5};

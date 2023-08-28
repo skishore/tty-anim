@@ -33,14 +33,37 @@ struct Terminal {
     getKeyInputs(io.inputs);
     io.tick();
 
-    lastFrame = io.frame;
     auto const size = lastFrame.size();
+    assert(size == io.frame.size());
     const Point offset{(terminalSize.x - size.x) / 2,
                        (terminalSize.y - size.y) / 2};
     for (auto row = 0; row < size.y; row++) {
-      moveCursor(offset + Point{0, row});
-      for (auto col = 0; col < size.x;) {
-        auto const glyph = lastFrame.get({col, row});
+      auto min_col = size.x;
+      auto max_col = 0;
+      for (auto col = 0; col < size.x; col++) {
+        auto const point = Point{col, row};
+        auto const old_glyph = lastFrame.get(point);
+        auto const new_glyph = io.frame.get(point);
+        if (old_glyph == new_glyph) continue;
+        min_col = std::min(min_col, col);
+        max_col = std::max(max_col, col);
+      }
+      if (min_col > max_col) continue;
+
+      auto const point = Point{min_col, row};
+      auto const glyph = io.frame.get(point);
+      moveCursor(offset + point);
+      setColors(glyph.fg, glyph.bg);
+      auto prev = glyph;
+
+      for (auto col = min_col; col <= max_col;) {
+        auto const point = Point{col, row};
+        auto const glyph = io.frame.get(point);
+        if (glyph.fg != prev.fg) setForegroundColor(glyph.fg);
+        if (glyph.bg != prev.bg) setBackgroundColor(glyph.bg);
+        lastFrame.set(point, glyph);
+        prev = glyph;
+
         if (glyph.ch > 0xff00) {
           const char ch0 = (glyph.ch & 0x3f) | 0x80;
           const char ch1 = 0xbc;
@@ -56,15 +79,8 @@ struct Terminal {
 
     const auto col = terminalSize.x - static_cast<int>(status.size());
     moveCursor({col - 1, terminalSize.y - 1});
+    setColors(kNone, kNone);
     std::cout << "\x1b[2K" << status << std::flush;
-
-    //state->update();
-    //erase();
-    //state->render();
-    //auto const color = 1 + 16 + 1 * 0 + 6 * 2 + 36 * 4;
-    //attr_set(0, 256, nullptr);
-    //mvaddstr(getRows() - 1, 0, status.data());
-    //refresh();
   }
 
   void exit() { initTerminal(false); }
@@ -90,6 +106,21 @@ struct Terminal {
 
   void moveCursor(Point point) {
     std::cout << "\x1b[" << point.y + 1 << ";" << point.x + 1 << "H";
+  }
+
+  void setColors(Color fg, Color bg) {
+    setForegroundColor(fg);
+    setBackgroundColor(bg);
+  }
+
+  void setForegroundColor(Color color) {
+    if (color == kNone) return static_cast<void>(std::cout << "\x1b[39m");
+    std::cout << "\x1b[38;5;" << static_cast<int>(color.value) << 'm';
+  }
+
+  void setBackgroundColor(Color color) {
+    if (color == kNone) return static_cast<void>(std::cout << "\x1b[49m");
+    std::cout << "\x1b[48;5;" << static_cast<int>(color.value) << 'm';
   }
 
   void getKeyInputs(std::deque<Input>& inputs) {
