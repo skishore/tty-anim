@@ -11,7 +11,7 @@ std::vector<Point> LOS(const Point& a, const Point& b) {
 
   auto const size = static_cast<size_t>(std::max(x_diff, y_diff) + 1);
   auto result = std::vector<Point>{};
-  result.resize(size);
+  result.reserve(size);
   result.push_back(a);
 
   auto test = 0;

@@ -64,7 +64,10 @@ struct Terminal {
         lastFrame.set(point, glyph);
         prev = glyph;
 
-        if (glyph.ch > 0xff00) {
+        if (glyph.ch == 0xff00) {
+          std::cout << "  ";
+          col += 2;
+        } else if (glyph.ch > 0xff00) {
           const char ch0 = (glyph.ch & 0x3f) | 0x80;
           const char ch1 = 0xbc;
           const char ch2 = 0xef;

@@ -7,6 +7,8 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////
 
 constexpr size_t kMapSize = 31;
+constexpr size_t kFOVRadius = 15;
+constexpr size_t kVisionRadius = 3;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -84,7 +86,7 @@ std::unique_ptr<Entity> makeTrainer(Point pos) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-Board::Board(Point size) : m_map(size, tileType('#')) {
+Board::Board(Point size) : m_fov(kFOVRadius), m_map(size, tileType('#')) {
   m_map.fill(tileType('.'));
 }
 
@@ -107,7 +109,15 @@ const std::vector<Entity*>& Board::getEntities() const {
   return m_entities;
 }
 
-void Board::setTile(Point p, const Tile* tile) { m_map.set(p, tile); }
+void Board::setTile(Point p, const Tile* tile) {
+  if (!m_map.contains(p)) return;
+  auto const prev = m_map.get(p);
+  m_map.set(p, tile);
+
+  auto const mask = (FlagBlocked | FlagObscure);
+  auto const dirty = (prev->flags & mask) != (tile->flags & mask);
+  if (dirty) for (auto const& entity : m_entities) dirtyVision(*entity, &p);
+}
 
 void Board::addEntity(OwnedEntity entity) {
   m_entities.emplace_back(entity.get());
@@ -127,6 +137,69 @@ void Board::moveEntity(Entity& entity, Point to) {
   assert(target == nullptr);
   target = std::move(source);
   target->pos = to;
+  dirtyVision(entity, nullptr);
+}
+
+bool Board::canSee(const Entity& entity, Point point) const {
+  return canSee(getVision(entity), point);
+}
+
+bool Board::canSee(const Vision& vision, Point point) const {
+  return vision.visibility.contains(point);
+}
+
+int32_t Board::visibilityAt(const Entity& entity, Point point) const {
+  return visibilityAt(getVision(entity), point);
+}
+
+int32_t Board::visibilityAt(const Vision& vision, Point point) const {
+  auto const it = vision.visibility.find(point);
+  return it != vision.visibility.end() ? it->second : -1;
+}
+
+const Vision& Board::getVision(const Entity& entity) const {
+  auto& result = m_vision[&entity];
+  if (result == nullptr) result.reset(new Vision{});
+
+  if (result->dirty) {
+    auto const pos = entity.pos;
+    auto& map = result->visibility;
+    map.clear();
+
+    auto const blocked = [&](Point p, const Point* parent) {
+      auto const q = p + pos;
+      auto const visibility = [&]() -> int32_t {
+        // The constants in these expressions come from Point.distanceNethack.
+        // They're chosen so that, in a field of tall grass, we can only see
+        // cells at a distanceNethack of <= kVisionRadius away.
+        if (!parent) return 100 * (kVisionRadius + 1) - 95 - 46 - 25;
+
+        auto const tile = m_map.get(q);
+        if (tile->flags & FlagBlocked) return 0;
+
+        auto const obscure = tile->flags & FlagObscure;
+        auto const diagonal = p.x != parent->x && p.y != parent->y;
+        auto const loss = obscure ? 95 + (diagonal ? 46 : 0) : 0;
+        auto const prev = map.at(*parent + pos);
+        return std::max(prev - loss, 0);
+      }();
+
+      auto [it, inserted] = map.insert({q, visibility});
+      if (!inserted) it->second = std::max(it->second, visibility);
+      return visibility <= 0;
+    };
+
+    m_fov.fieldOfVision(blocked);
+    result->dirty = false;
+  }
+  return *result;
+}
+
+void Board::dirtyVision(const Entity& entity, const Point* target) {
+  auto const it = m_vision.find(&entity);
+  if (it == m_vision.end() || it->second->dirty) return;
+  if (target && !canSee(*it->second, *target)) return;
+  it->second->dirty = true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -181,17 +254,24 @@ State::State() : board({kMapSize, kMapSize}) {
 namespace {
 
 void render(const State& state, Matrix<Glyph>& frame) {
+  auto const& board = state.board;
+  auto const& vision = board.getVision(*state.player);
+
   auto const offset = Point::origin();
-  auto const size = state.board.getSize();
+  auto const size = board.getSize();
   auto const map = [&](Point p) { return offset + Point{2 * p.x, p.y}; };
+
   for (auto y = 0; y < size.y; y++) {
     for (auto x = 0; x < size.x; x++) {
       auto const p = Point{x, y};
-      frame.set(map(p), state.board.getTile(p).glyph);
+      auto const seen = board.canSee(vision, p);
+      frame.set(map(p), seen ? board.getTile(p).glyph : Empty());
     }
   }
-  for (const auto& entity : state.board.getEntities()) {
-    frame.set(map(entity->pos), entity->glyph);
+
+  for (const auto& entity : board.getEntities()) {
+    auto const seen = board.canSee(vision, entity->pos);
+    if (seen) frame.set(map(entity->pos), entity->glyph);
   }
 }
 

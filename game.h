@@ -5,13 +5,14 @@
 #include <vector>
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
 
 #include "base.h"
 #include "geo.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
-enum class Status { Free, Blocked, Occupied };
+enum struct Status { Free, Blocked, Occupied };
 
 using TileFlags = uint8_t;
 constexpr static TileFlags FlagNone    = 0x0;
@@ -43,6 +44,13 @@ using OwnedEntity = std::unique_ptr<Entity>;
 
 //////////////////////////////////////////////////////////////////////////////
 
+struct Vision {
+  bool dirty = true;
+  absl::flat_hash_map<Point, int32_t> visibility;
+
+  DISALLOW_COPY_AND_ASSIGN(Vision);
+};
+
 struct Board {
   explicit Board(Point size);
 
@@ -62,10 +70,22 @@ struct Board {
   void addEntity(OwnedEntity entity);
   void moveEntity(Entity& entity, Point to);
 
+  // Cached field-of-vision
+
+  bool canSee(const Entity& entity, Point point) const;
+  bool canSee(const Vision& vision, Point point) const;
+  int32_t visibilityAt(const Entity& entity, Point point) const;
+  int32_t visibilityAt(const Vision& vision, Point point) const;
+  const Vision& getVision(const Entity& entity) const;
+
 private:
+  void dirtyVision(const Entity& entity, const Point* target);
+
+  const FOV m_fov;
   Matrix<const Tile*> m_map;
   std::vector<Entity*> m_entities;
   absl::flat_hash_map<Point, OwnedEntity> m_entityAtPos;
+  mutable absl::flat_hash_map<const Entity*, std::unique_ptr<Vision>> m_vision;
 
   DISALLOW_COPY_AND_ASSIGN(Board);
 };

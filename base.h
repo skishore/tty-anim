@@ -44,6 +44,8 @@ constexpr static Glyph Wide(char ch, int code = 255) {
   return {wide, code == 255 ? kNone : RGB(code), kNone};
 }
 
+constexpr static Glyph Empty() { return Wide(' '); }
+
 //////////////////////////////////////////////////////////////////////////////
 
 #define INPUTS(X) \
@@ -60,7 +62,7 @@ constexpr static Glyph Wide(char ch, int code = 255) {
   X(ShiftRight)   \
   X(ShiftLeft)    \
 
-enum class Input : uint8_t {
+enum struct Input : uint8_t {
 #define X(name) name,
 INPUTS(X)
 #undef X

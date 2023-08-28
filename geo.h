@@ -20,8 +20,8 @@ struct Point {
   bool operator==(const Point& o) const { return x == o.x && y == o.y; }
   bool operator!=(const Point& o) const { return x != o.x || y != o.y; }
 
-  double len() const { return std::sqrt(lenSquared()); }
-  int32_t lenSquared() const { return x * x + y * y; }
+  double lenL2() const { return std::sqrt(lenL2Squared()); }
+  int32_t lenL2Squared() const { return x * x + y * y; }
 
   int32_t lenNethack() const {
     auto const ax = std::abs(x);
@@ -77,5 +77,57 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 std::vector<Point> LOS(const Point& a, const Point& b);
+
+struct FOVNode {
+  const Point point = {};
+  const FOVNode* parent = {};
+  std::vector<std::unique_ptr<FOVNode>> children;
+};
+
+struct FOV {
+  FOV(int32_t r) : radius(r) {
+    root = std::make_unique<FOVNode>();
+    for (auto i = 0; i <= radius; i++) {
+      for (auto j = 0; j < 8; j++) {
+        auto const [xa, ya] = (j & 1) ? Point{radius, i} : Point{i, radius};
+        auto const xb = xa * ((j & 2) ? 1 : -1);
+        auto const yb = ya * ((j & 4) ? 1 : -1);
+        trieUpdate(*root, LOS(Point::origin(), {xb, yb}), 0);
+      }
+    }
+  }
+
+  template <typename Fn>
+  void fieldOfVision(Fn blocked) const {
+    cache.clear();
+    cache.push_back(root.get());
+    for (size_t i = 0; i < cache.size(); i++) {
+      auto const node = cache[i];
+      auto const prev = node->parent ? &node->parent->point : nullptr;
+      if (blocked(node->point, prev)) continue;
+      for (const auto& x : node->children) cache.push_back(x.get());
+    }
+  }
+
+private:
+  void trieUpdate(FOVNode& node, const std::vector<Point>& line, size_t i) {
+    assert(line[i] == node.point);
+    if (node.point.lenL2() > radius - 0.5) return;
+    if (!(i + 1 < line.size())) return;
+
+    auto const next = line[i + 1];
+    auto& child = [&]() -> FOVNode& {
+      for (auto& x : node.children) if (x->point == next) return *x;
+      node.children.emplace_back(new FOVNode{next, &node, {}});
+      return *node.children.back();
+    }();
+    assert(next == child.point);
+    trieUpdate(child, line, i + 1);
+  }
+
+  const int32_t radius;
+  std::unique_ptr<FOVNode> root;
+  mutable std::vector<const FOVNode*> cache;
+};
 
 //////////////////////////////////////////////////////////////////////////////
