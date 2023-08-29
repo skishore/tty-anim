@@ -12,8 +12,11 @@ constexpr size_t kVisionRadius = 3;
 
 //////////////////////////////////////////////////////////////////////////////
 
-void initBoard(Board& board) {
+void initBoard(Board& board, RNG& rng) {
+  board.clearAllTiles();
   auto const size = board.getSize();
+  std::uniform_int_distribution<> d100(0, 99);
+
   auto const automata = [&]() -> Matrix<bool> {
     Matrix<bool> result{size, false};
     for (auto x = 0; x < size.x; x++) {
@@ -27,7 +30,7 @@ void initBoard(Board& board) {
 
     for (auto y = 0; y < size.y; y++) {
       for (auto x = 0; x < size.x; x++) {
-        if (rand() % 100 < 45) result.set({x, y}, true);
+        if (d100(rng) < 45) result.set({x, y}, true);
       }
     }
 
@@ -86,9 +89,7 @@ std::unique_ptr<Entity> makeTrainer(Point pos) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-Board::Board(Point size) : m_fov(kFOVRadius), m_map(size, tileType('#')) {
-  m_map.fill(tileType('.'));
-}
+Board::Board(Point size) : m_fov(kFOVRadius), m_map(size, tileType('#')) {}
 
 Point Board::getSize() const { return m_map.size(); }
 
@@ -105,9 +106,9 @@ const Entity* Board::getEntity(Point p) const {
   return it != m_entityAtPos.end() ? it->second.get() : nullptr;
 }
 
-const std::vector<Entity*>& Board::getEntities() const {
-  return m_entities;
-}
+const std::vector<Entity*>& Board::getEntities() const { return m_entities; }
+
+void Board::clearAllTiles() { m_map.fill(tileType('.')); }
 
 void Board::setTile(Point p, const Tile* tile) {
   if (!m_map.contains(p)) return;
@@ -247,7 +248,8 @@ State::State() : board({kMapSize, kMapSize}) {
   auto const size = board.getSize();
   auto const start = Point{size.x / 2, size.y / 2};
   while (true) {
-    initBoard(board);
+    rng = RNG(epochTimeMicroseconds());
+    initBoard(board, rng);
     if (board.getStatus(start) == Status::Free) break;
   }
   auto trainer = makeTrainer(start);

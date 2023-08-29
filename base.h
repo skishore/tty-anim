@@ -13,6 +13,15 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
+using time_us_t = uint64_t;
+
+inline time_us_t epochTimeMicroseconds() {
+  auto const epoch = std::chrono::steady_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::microseconds>(epoch).count();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 struct Color { uint8_t value; };
 struct Glyph { uint16_t ch; Color fg; Color bg; };
 

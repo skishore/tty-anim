@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ struct Board {
 
   // Writes
 
+  void clearAllTiles();
   void setTile(Point p, const Tile* tile);
   void addEntity(OwnedEntity entity);
   void moveEntity(Entity& entity, Point to);
@@ -93,9 +95,12 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
+using RNG = std::mt19937;
+
 struct State {
   State();
 
+  RNG rng;
   Board board;
   Entity* player;
 

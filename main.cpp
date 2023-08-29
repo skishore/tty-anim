@@ -185,11 +185,10 @@ auto constexpr kUsPerFrame = kUsPerSecond / kFPS;
 auto constexpr kUsMinDelay = int(0.9 * kUsPerFrame);
 
 struct Timing {
-  using time_us_t = uint64_t;
   struct Stats { double cpu; double fps; };
 
   Timing() {
-    auto const ts = time();
+    auto const ts = epochTimeMicroseconds();
     for (auto i = 0; i < kFPS; i++) frames[i] = {ts, ts};
   }
 
@@ -197,7 +196,7 @@ struct Timing {
     auto const& a = frames[index % kFPS];
     auto const& b = frames[(index + kFPS - 1) % kFPS];
     auto const next = std::max(a.first + kUsPerSecond, b.first + kUsMinDelay);
-    auto const prev = time();
+    auto const prev = epochTimeMicroseconds();
     if (next <= prev) return;
     auto const delay = std::min<time_us_t>(next - prev, kUsPerFrame);
     std::this_thread::sleep_for(std::chrono::microseconds(delay));
@@ -215,22 +214,17 @@ struct Timing {
   void start() {
     auto& frame = frames[index % kFPS];
     used -= frame.second - frame.first;
-    frame.first = time();
+    frame.first = epochTimeMicroseconds();
   }
 
   void end() {
     auto& frame = frames[index % kFPS];
-    frame.second = time();
+    frame.second = epochTimeMicroseconds();
     used += frame.second - frame.first;
     index++;
   }
 
  private:
-  time_us_t time() const {
-    auto const epoch = std::chrono::steady_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::microseconds>(epoch).count();
-  }
-
   using Frame = std::pair<time_us_t, time_us_t>;
   Frame frames[kFPS];
   time_us_t used = 0;
@@ -251,7 +245,6 @@ void segfaultHandler(int) {
 }
 
 int main() {
-  srand(time(nullptr));
   signal(SIGINT, sigintHandler);
   signal(SIGSEGV, segfaultHandler);
   Terminal terminal;
