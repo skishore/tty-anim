@@ -248,7 +248,7 @@ State::State() : board({kMapSize, kMapSize}) {
   auto const size = board.getSize();
   auto const start = Point{size.x / 2, size.y / 2};
   while (true) {
-    rng = RNG(epochTimeMicroseconds());
+    rng = RNG(epochTimeNanos());
     initBoard(board, rng);
     if (board.getStatus(start) == Status::Free) break;
   }

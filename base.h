@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 
 //////////////////////////////////////////////////////////////////////////////
@@ -13,11 +14,11 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
-using time_us_t = uint64_t;
+using time_ns_t = uint64_t;
 
-inline time_us_t epochTimeMicroseconds() {
+inline time_ns_t epochTimeNanos() {
   auto const epoch = std::chrono::steady_clock::now().time_since_epoch();
-  return std::chrono::duration_cast<std::chrono::microseconds>(epoch).count();
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(epoch).count();
 }
 
 //////////////////////////////////////////////////////////////////////////////

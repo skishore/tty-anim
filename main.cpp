@@ -180,54 +180,55 @@ struct Terminal {
 //////////////////////////////////////////////////////////////////////////////
 
 auto constexpr kFPS = 60;
-auto constexpr kUsPerSecond = 1000000;
-auto constexpr kUsPerFrame = kUsPerSecond / kFPS;
-auto constexpr kUsMinDelay = int(0.9 * kUsPerFrame);
+auto constexpr kNanosPerSecond = time_ns_t{1000000000};
+auto constexpr kNanosPerFrame = time_ns_t{kNanosPerSecond / kFPS};
+auto constexpr kNanosMinDelay = int(0.9 * kNanosPerFrame);
 
 struct Timing {
   struct Stats { double cpu; double fps; };
 
   Timing() {
-    auto const ts = epochTimeMicroseconds();
+    auto const ts = epochTimeNanos();
     for (auto i = 0; i < kFPS; i++) frames[i] = {ts, ts};
   }
 
   void block() const {
     auto const& a = frames[index % kFPS];
     auto const& b = frames[(index + kFPS - 1) % kFPS];
-    auto const next = std::max(a.first + kUsPerSecond, b.first + kUsMinDelay);
-    auto const prev = epochTimeMicroseconds();
+    auto const next = std::max(a.first + kNanosPerSecond,
+                               b.first + kNanosMinDelay);
+    auto const prev = epochTimeNanos();
     if (next <= prev) return;
-    auto const delay = std::min<time_us_t>(next - prev, kUsPerFrame);
-    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    auto const delay = std::min<time_ns_t>(next - prev, kNanosPerFrame);
+    std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
   }
 
   Stats stats() const {
     auto const& a = frames[index % kFPS];
     auto const& b = frames[(index + kFPS - 1) % kFPS];
-    auto const total = std::max<time_us_t>(b.second - a.first, 1);
+    auto const total = std::max<time_ns_t>(b.second - a.first, 1);
     auto const cpu = static_cast<double>(used) * 100 / total;
-    auto const fps = static_cast<double>(kFPS) * kUsPerSecond / total;
+    auto const fps = static_cast<double>(kFPS) * kNanosPerSecond / total;
     return {cpu, fps};
   }
 
   void start() {
     auto& frame = frames[index % kFPS];
     used -= frame.second - frame.first;
-    frame.first = epochTimeMicroseconds();
+    frame.first = epochTimeNanos();
   }
 
   void end() {
     auto& frame = frames[index % kFPS];
-    frame.second = epochTimeMicroseconds();
+    frame.second = epochTimeNanos();
     used += frame.second - frame.first;
     index++;
   }
 
  private:
-  using Frame = std::pair<time_us_t, time_us_t>;
+  using Frame = std::pair<time_ns_t, time_ns_t>;
   Frame frames[kFPS];
-  time_us_t used = 0;
+  time_ns_t used = 0;
   size_t index = 0;
 };
 
