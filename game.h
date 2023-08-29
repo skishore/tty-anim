@@ -45,8 +45,9 @@ using OwnedEntity = std::unique_ptr<Entity>;
 //////////////////////////////////////////////////////////////////////////////
 
 struct Vision {
+  Point offset;
   bool dirty = true;
-  absl::flat_hash_map<Point, int32_t> visibility;
+  Matrix<int32_t> visibility;
 
   DISALLOW_COPY_AND_ASSIGN(Vision);
 };

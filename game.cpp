@@ -145,7 +145,7 @@ bool Board::canSee(const Entity& entity, Point point) const {
 }
 
 bool Board::canSee(const Vision& vision, Point point) const {
-  return vision.visibility.contains(point);
+  return visibilityAt(vision, point) >= 0;
 }
 
 int32_t Board::visibilityAt(const Entity& entity, Point point) const {
@@ -153,18 +153,23 @@ int32_t Board::visibilityAt(const Entity& entity, Point point) const {
 }
 
 int32_t Board::visibilityAt(const Vision& vision, Point point) const {
-  auto const it = vision.visibility.find(point);
-  return it != vision.visibility.end() ? it->second : -1;
+  return vision.visibility.get(point + vision.offset);
 }
 
 const Vision& Board::getVision(const Entity& entity) const {
+  auto const radius = kFOVRadius;
   auto& result = m_vision[&entity];
-  if (result == nullptr) result.reset(new Vision{});
+  if (result == nullptr) {
+    result.reset(new Vision{});
+    const size_t side = 2 * radius + 1;
+    result->visibility = Matrix({side, side}, -1);
+  }
 
   if (result->dirty) {
     auto const pos = entity.pos;
+    auto const offset = Point{radius, radius} - pos;
     auto& map = result->visibility;
-    map.clear();
+    map.fill(-1);
 
     auto const blocked = [&](Point p, const Point* parent) {
       auto const q = p + pos;
@@ -180,16 +185,17 @@ const Vision& Board::getVision(const Entity& entity) const {
         auto const obscure = tile->flags & FlagObscure;
         auto const diagonal = p.x != parent->x && p.y != parent->y;
         auto const loss = obscure ? 95 + (diagonal ? 46 : 0) : 0;
-        auto const prev = map.at(*parent + pos);
+        auto const prev = map.get(*parent + pos + offset);
         return std::max(prev - loss, 0);
       }();
 
-      auto [it, inserted] = map.insert({q, visibility});
-      if (!inserted) it->second = std::max(it->second, visibility);
+      auto const key = q + offset;
+      map.set(key, std::max(visibility, map.get(key)));
       return visibility <= 0;
     };
 
     m_fov.fieldOfVision(blocked);
+    result->offset = offset;
     result->dirty = false;
   }
   return *result;
