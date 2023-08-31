@@ -10,6 +10,7 @@
 #include <absl/container/flat_hash_set.h>
 
 #include "base.h"
+#include "entity.h"
 #include "geo.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -38,19 +39,6 @@ inline const Tile* tileType(char ch) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct Entity {
-  bool player;
-  bool removed;
-  int32_t moveTimer;
-  int32_t turnTimer;
-  double speed;
-  Glyph glyph;
-  Point pos;
-};
-using OwnedEntity = std::unique_ptr<Entity>;
-
-//////////////////////////////////////////////////////////////////////////////
-
 struct Vision {
   Point offset;
   bool dirty = true;
@@ -68,9 +56,9 @@ struct Board {
 
   Status getStatus(Point p) const;
   const Tile& getTile(Point p) const;
-  const Entity* getEntity(Point p) const;
 
   Entity& getActiveEntity();
+  Entity* getEntity(Point p);
   const std::vector<Entity*>& getEntities() const;
 
   // Writes
@@ -79,6 +67,7 @@ struct Board {
   void setTile(Point p, const Tile* tile);
   void addEntity(OwnedEntity entity);
   void moveEntity(Entity& entity, Point to);
+  void removeEntity(Entity& entity);
   void advanceEntity();
 
   // Cached field-of-vision

@@ -14,6 +14,7 @@ constexpr size_t kVisionRadius = 3;
 constexpr size_t kMoveTimer = 960;
 constexpr size_t kTurnTimer = 120;
 
+constexpr int32_t kTrainerHP = 8;
 constexpr double kTrainerSpeed = 1.0 / 10;
 
 constexpr Point kSteps[] = {
@@ -29,17 +30,17 @@ std::uniform_int_distribution<> die(size_t n) {
 
 void charge(Entity& entity) {
   auto const charge = static_cast<int>(round(kTurnTimer * entity.speed));
-  if (entity.moveTimer > 0) entity.moveTimer -= charge;
-  if (entity.turnTimer > 0) entity.turnTimer -= charge;
+  if (entity.move_timer > 0) entity.move_timer -= charge;
+  if (entity.turn_timer > 0) entity.turn_timer -= charge;
 }
 
-//bool moveReady(const Entity& entity) { return entity.moveTimer <= 0; }
+//bool moveReady(const Entity& entity) { return entity.move_timer <= 0; }
 
-bool turnReady(const Entity& entity) { return entity.turnTimer <= 0; }
+bool turnReady(const Entity& entity) { return entity.turn_timer <= 0; }
 
 void wait(Entity& entity, double moves, double turns) {
-  entity.moveTimer += static_cast<int>(round(kMoveTimer * moves));
-  entity.turnTimer += static_cast<int>(round(kTurnTimer * turns));
+  entity.move_timer += static_cast<int>(round(kMoveTimer * moves));
+  entity.turn_timer += static_cast<int>(round(kTurnTimer * turns));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -51,8 +52,15 @@ constexpr Result kFailure { .success = false, .moves = 0, .turns = 1 };
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
+bool player(const Entity& entity) {
+  return entity.match(
+    [](const Pokemon&) { return false; },
+    [](const Trainer& trainer) { return trainer.player; }
+  );
+}
+
 Action plan(const Entity& entity, MaybeAction& input, RNG& rng) {
-  if (!entity.player) {
+  if (!player(entity)) {
     return MoveAction{kSteps[die(std::size(kSteps))(rng)]};
   }
   //if (!entity.player) return IdleAction{};
@@ -145,30 +153,6 @@ void initBoard(Board& board, RNG& rng) {
   }
 }
 
-OwnedEntity makePokemon(Point pos) {
-  return std::make_unique<Entity>(Entity{
-    .player = false,
-    .removed = false,
-    .moveTimer = 0,
-    .turnTimer = 0,
-    .speed = 0.5 * kTrainerSpeed,
-    .glyph = Wide('P'),
-    .pos = pos
-  });
-}
-
-OwnedEntity makeTrainer(Point pos, bool player) {
-  return std::make_unique<Entity>(Entity{
-    .player = player,
-    .removed = false,
-    .moveTimer = 0,
-    .turnTimer = 0,
-    .speed = kTrainerSpeed,
-    .glyph = Wide('@'),
-    .pos = pos
-  });
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 } // namespace
@@ -187,14 +171,14 @@ Status Board::getStatus(Point p) const {
 
 const Tile& Board::getTile(Point p) const { return *m_map.get(p); }
 
-const Entity* Board::getEntity(Point p) const {
-  auto const it = m_entityAtPos.find(p);
-  return it != m_entityAtPos.end() ? it->second.get() : nullptr;
-}
-
 Entity& Board::getActiveEntity() {
   assert(m_entityIndex < m_entities.size());
   return *m_entities[m_entityIndex];
+}
+
+Entity* Board::getEntity(Point p) {
+  auto const it = m_entityAtPos.find(p);
+  return it != m_entityAtPos.end() ? it->second.get() : nullptr;
 }
 
 const std::vector<Entity*>& Board::getEntities() const { return m_entities; }
@@ -230,6 +214,14 @@ void Board::moveEntity(Entity& entity, Point to) {
   target = std::move(source);
   target->pos = to;
   dirtyVision(entity, nullptr);
+}
+
+void Board::removeEntity(Entity& entity) {
+  auto it = m_entityAtPos.find(entity.pos);
+  assert(it != m_entityAtPos.end());
+  assert(it->second.get() == &entity);
+  m_entityAtPos.erase(it);
+  m_vision.erase(&entity);
 }
 
 void Board::advanceEntity() {
@@ -349,7 +341,7 @@ void updateState(State& state, std::deque<Input>& inputs) {
     }
     auto const action = plan(entity, state.input, state.rng);
     auto const result = act(board, entity, action);
-    if (!result.success && entity.player) break;
+    if (!result.success && &entity == &player) break;
     wait(entity, result.moves, result.turns);
   }
 }
@@ -370,9 +362,8 @@ State::State() : board({kMapSize, kMapSize}) {
     if (board.getStatus(start) == Status::Free) break;
   }
 
-  auto trainer = makeTrainer(start, true);
-  player = trainer.get();
-  board.addEntity(std::move(trainer));
+  player = new Trainer("", start, true, kTrainerHP, kTrainerSpeed);
+  board.addEntity(OwnedEntity(player));
 
   auto dx = die(board.getSize().x);
   auto dy = die(board.getSize().y);
@@ -384,7 +375,8 @@ State::State() : board({kMapSize, kMapSize}) {
       }
       return std::nullopt;
     }();
-    if (pos) board.addEntity(makePokemon(*pos));
+    (void)pos;
+    //if (pos) board.addEntity(nullptr);
   }
 }
 
