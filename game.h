@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -38,6 +39,11 @@ inline const Tile* tileType(char ch) {
 //////////////////////////////////////////////////////////////////////////////
 
 struct Entity {
+  bool player;
+  bool removed;
+  int32_t moveTimer;
+  int32_t turnTimer;
+  double speed;
   Glyph glyph;
   Point pos;
 };
@@ -64,6 +70,7 @@ struct Board {
   const Tile& getTile(Point p) const;
   const Entity* getEntity(Point p) const;
 
+  Entity& getActiveEntity();
   const std::vector<Entity*>& getEntities() const;
 
   // Writes
@@ -72,6 +79,7 @@ struct Board {
   void setTile(Point p, const Tile* tile);
   void addEntity(OwnedEntity entity);
   void moveEntity(Entity& entity, Point to);
+  void advanceEntity();
 
   // Cached field-of-vision
 
@@ -85,6 +93,7 @@ private:
   void dirtyVision(const Entity& entity, const Point* target);
 
   const FOV m_fov;
+  size_t m_entityIndex = {};
   Matrix<const Tile*> m_map;
   std::vector<Entity*> m_entities;
   absl::flat_hash_map<Point, OwnedEntity> m_entityAtPos;
@@ -92,6 +101,15 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(Board);
 };
+
+//////////////////////////////////////////////////////////////////////////////
+
+struct IdleAction {};
+struct MoveAction { Point step; };
+struct WaitForInputAction {};
+
+using Action = std::variant<IdleAction, MoveAction, WaitForInputAction>;
+using MaybeAction = std::optional<Action>;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -103,6 +121,7 @@ struct State {
   RNG rng;
   Board board;
   Entity* player;
+  MaybeAction input;
 
   DISALLOW_COPY_AND_ASSIGN(State);
 };

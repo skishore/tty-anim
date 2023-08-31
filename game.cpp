@@ -1,4 +1,5 @@
 #include "game.h"
+#include <random>
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -10,12 +11,77 @@ constexpr size_t kMapSize = 31;
 constexpr size_t kFOVRadius = 15;
 constexpr size_t kVisionRadius = 3;
 
+constexpr size_t kMoveTimer = 960;
+constexpr size_t kTurnTimer = 120;
+
+constexpr double kTrainerSpeed = 1.0 / 10;
+
+constexpr Point kSteps[] = {
+  {-1,  0}, {0,  1}, { 0, -1}, {1, 0},
+  {-1, -1}, {1, -1}, {-1,  1}, {1, 1},
+};
+
+//////////////////////////////////////////////////////////////////////////////
+
+std::uniform_int_distribution<> die(size_t n) {
+  return std::uniform_int_distribution<>{0, static_cast<int>(n - 1)};
+}
+
+void charge(Entity& entity) {
+  auto const charge = static_cast<int>(round(kTurnTimer * entity.speed));
+  if (entity.moveTimer > 0) entity.moveTimer -= charge;
+  if (entity.turnTimer > 0) entity.turnTimer -= charge;
+}
+
+//bool moveReady(const Entity& entity) { return entity.moveTimer <= 0; }
+
+bool turnReady(const Entity& entity) { return entity.turnTimer <= 0; }
+
+void wait(Entity& entity, double moves, double turns) {
+  entity.moveTimer += static_cast<int>(round(kMoveTimer * moves));
+  entity.turnTimer += static_cast<int>(round(kTurnTimer * turns));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+struct Result { bool success; int moves; int turns; };
+constexpr Result kSuccess { .success = true,  .moves = 0, .turns = 1 };
+constexpr Result kFailure { .success = false, .moves = 0, .turns = 1 };
+
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+Action plan(const Entity& entity, MaybeAction& input, RNG& rng) {
+  if (!entity.player) {
+    return MoveAction{kSteps[die(std::size(kSteps))(rng)]};
+  }
+  //if (!entity.player) return IdleAction{};
+  if (!input) return WaitForInputAction{};
+  auto result = std::move(*input);
+  input.reset();
+  return result;
+}
+
+Result act(Board& board, Entity& entity, const Action& action) {
+  return std::visit(overloaded{
+    [&](const IdleAction&) { return kSuccess; },
+    [&](const MoveAction& m) {
+      auto const pos = entity.pos + m.step;
+      if (pos == entity.pos) return kSuccess;
+      if (board.getStatus(pos) != Status::Free) return kFailure;
+      board.moveEntity(entity, pos);
+      return kSuccess;
+    },
+    [&](const WaitForInputAction&) { return kFailure; },
+  }, action);
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 void initBoard(Board& board, RNG& rng) {
   board.clearAllTiles();
   auto const size = board.getSize();
-  std::uniform_int_distribution<> d100(0, 99);
+  auto d100 = die(100);
 
   auto const automata = [&]() -> Matrix<bool> {
     Matrix<bool> result{size, false};
@@ -79,8 +145,28 @@ void initBoard(Board& board, RNG& rng) {
   }
 }
 
-std::unique_ptr<Entity> makeTrainer(Point pos) {
-  return std::make_unique<Entity>(Entity{.glyph = Wide('@'), .pos = pos});
+OwnedEntity makePokemon(Point pos) {
+  return std::make_unique<Entity>(Entity{
+    .player = false,
+    .removed = false,
+    .moveTimer = 0,
+    .turnTimer = 0,
+    .speed = 0.5 * kTrainerSpeed,
+    .glyph = Wide('P'),
+    .pos = pos
+  });
+}
+
+OwnedEntity makeTrainer(Point pos, bool player) {
+  return std::make_unique<Entity>(Entity{
+    .player = player,
+    .removed = false,
+    .moveTimer = 0,
+    .turnTimer = 0,
+    .speed = kTrainerSpeed,
+    .glyph = Wide('@'),
+    .pos = pos
+  });
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -104,6 +190,11 @@ const Tile& Board::getTile(Point p) const { return *m_map.get(p); }
 const Entity* Board::getEntity(Point p) const {
   auto const it = m_entityAtPos.find(p);
   return it != m_entityAtPos.end() ? it->second.get() : nullptr;
+}
+
+Entity& Board::getActiveEntity() {
+  assert(m_entityIndex < m_entities.size());
+  return *m_entities[m_entityIndex];
 }
 
 const std::vector<Entity*>& Board::getEntities() const { return m_entities; }
@@ -139,6 +230,12 @@ void Board::moveEntity(Entity& entity, Point to) {
   target = std::move(source);
   target->pos = to;
   dirtyVision(entity, nullptr);
+}
+
+void Board::advanceEntity() {
+  charge(getActiveEntity());
+  m_entityIndex += 1;
+  if (m_entityIndex >= m_entities.size()) m_entityIndex = 0;
 }
 
 bool Board::canSee(const Entity& entity, Point point) const {
@@ -225,21 +322,41 @@ void processInput(State& state, Input input) {
       case 'u': return Point{ 1, -1};
       case 'b': return Point{-1,  1};
       case 'n': return Point{ 1,  1};
+      case '.': return Point{ 0,  0};
     }
     return std::nullopt;
   }();
 
-  if (!dir) return;
-  auto const target = state.player->pos + *dir;
-  auto const status = state.board.getStatus(target);
-  if (status == Status::Free) state.board.moveEntity(*state.player, target);
+  if (dir) state.input = MoveAction{*dir};
+}
+
+void updateState(State& state, std::deque<Input>& inputs) {
+  auto& board = state.board;
+  auto& player = *state.player;
+
+  if (!player.removed && &player == &board.getActiveEntity()) {
+    while (!inputs.empty() && !state.input) {
+      processInput(state, inputs.front());
+      inputs.pop_front();
+    }
+  }
+
+  while (!player.removed) {
+    auto& entity = board.getActiveEntity();
+    if (!turnReady(entity)) {
+      board.advanceEntity();
+      continue;
+    }
+    auto const action = plan(entity, state.input, state.rng);
+    auto const result = act(board, entity, action);
+    if (!result.success && entity.player) break;
+    wait(entity, result.moves, result.turns);
+  }
 }
 
 void update(State& state, std::deque<Input>& inputs) {
-  while (!inputs.empty()) {
-    processInput(state, inputs.front());
-    inputs.pop_front();
-  }
+  updateState(state, inputs);
+  //updatePlayerKnowledge(state);
 }
 
 } // namespace
@@ -252,9 +369,23 @@ State::State() : board({kMapSize, kMapSize}) {
     initBoard(board, rng);
     if (board.getStatus(start) == Status::Free) break;
   }
-  auto trainer = makeTrainer(start);
+
+  auto trainer = makeTrainer(start, true);
   player = trainer.get();
   board.addEntity(std::move(trainer));
+
+  auto dx = die(board.getSize().x);
+  auto dy = die(board.getSize().y);
+  for (auto i = 0; i < 5; i++) {
+    auto const pos = [&]() -> std::optional<Point> {
+      for (auto j = 0; j < 100; j++) {
+        auto const result = Point{dx(rng), dy(rng)};
+        if (board.getStatus(result) == Status::Free) return result;
+      }
+      return std::nullopt;
+    }();
+    if (pos) board.addEntity(makePokemon(*pos));
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////
