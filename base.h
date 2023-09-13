@@ -1,5 +1,8 @@
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -13,6 +16,9 @@
   X& operator=(const X&) = delete;
 
 //////////////////////////////////////////////////////////////////////////////
+
+template <typename K> using HashSet = absl::flat_hash_set<K>;
+template <typename K, typename V> using HashMap = absl::flat_hash_map<K, V>;
 
 using time_ns_t = uint64_t;
 

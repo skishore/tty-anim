@@ -8,7 +8,10 @@
 
 //////////////////////////////////////////////////////////////////////////////
 
+struct Attack;
 struct Trainer;
+
+using Attacks = std::array<const Attack*, 4>;
 
 struct Attack {
   std::string name;
@@ -21,16 +24,12 @@ struct PokemonSpeciesData {
   Glyph glyph;
   int32_t hp;
   double speed;
-
-  DISALLOW_COPY_AND_ASSIGN(PokemonSpeciesData);
 };
 
 struct PokemonIndividualData {
-  std::array<const Attack*, 4> attacks;
+  Attacks attacks;
   const PokemonSpeciesData& species;
   std::weak_ptr<Trainer> trainer;
-
-  DISALLOW_COPY_AND_ASSIGN(PokemonIndividualData);
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -39,7 +38,7 @@ struct Entity {
   enum class Type { Pokemon, Trainer };
 
   Entity(Type type, Point pos, Glyph glyph, int32_t hp, double speed);
-  virtual ~Entity() = default;
+  virtual ~Entity() {}
 
   template <typename P, typename T> auto match(P p, T t);
   template <typename P, typename T> auto match(P p, T t) const;
@@ -58,7 +57,10 @@ struct Entity {
 };
 
 struct Pokemon : public Entity {
-  PokemonIndividualData* self;
+  Pokemon(const std::string& species, Point pos);
+  Pokemon(std::shared_ptr<PokemonIndividualData> self, Point pos);
+
+  std::shared_ptr<PokemonIndividualData> self;
 };
 
 struct Trainer : public Entity {

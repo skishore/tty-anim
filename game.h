@@ -6,9 +6,6 @@
 #include <string>
 #include <vector>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
-
 #include "base.h"
 #include "entity.h"
 #include "geo.h"
@@ -29,7 +26,7 @@ struct Tile {
 };
 
 inline const Tile* tileType(char ch) {
-  static const absl::flat_hash_map<char, Tile> result{
+  static const HashMap<char, Tile> result{
     {'.', {Wide('.'),        FlagNone,    "grass"}},
     {'"', {Wide('"', 0x231), FlagObscure, "tall grass"}},
     {'#', {Wide('#', 0x010), FlagBlocked, "a tree"}},
@@ -85,8 +82,8 @@ private:
   size_t m_entityIndex = {};
   Matrix<const Tile*> m_map;
   std::vector<Entity*> m_entities;
-  absl::flat_hash_map<Point, OwnedEntity> m_entityAtPos;
-  mutable absl::flat_hash_map<const Entity*, std::unique_ptr<Vision>> m_vision;
+  HashMap<Point, OwnedEntity> m_entityAtPos;
+  mutable HashMap<const Entity*, std::unique_ptr<Vision>> m_vision;
 
   DISALLOW_COPY_AND_ASSIGN(Board);
 };

@@ -375,8 +375,7 @@ State::State() : board({kMapSize, kMapSize}) {
       }
       return std::nullopt;
     }();
-    (void)pos;
-    //if (pos) board.addEntity(nullptr);
+    if (pos) board.addEntity(OwnedEntity(new Pokemon("Pidgey", *pos)));
   }
 }
 
